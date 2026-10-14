@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Linux X11 support using xdotool
+
+### Changed
+- Documented X11 requirements and the Wayland limitation
+
 ## [1.0.0] - 2025-12-09
 
 ### Added
@@ -22,6 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical Details
 - Pure Bash implementation
-- Uses cliclick for mouse/keyboard automation
+- Uses cliclick on macOS and xdotool on Linux X11 for mouse/keyboard automation
 - Runs as background daemon
 - Control via file-based flags

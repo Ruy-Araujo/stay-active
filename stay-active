@@ -5,7 +5,9 @@
 # License: MIT
 # Repository: https://github.com/sleekhost/stay-active
 #
+
 VERSION="1.0.0"
+PLATFORM=$(uname -s)
 
 CONTROL_FILE="$HOME/.local/.stay_active_on"
 PID_FILE="$HOME/.local/.stay_active_pid"
@@ -20,7 +22,7 @@ NC='\033[0m' # No Color
 show_help() {
     cat << EOF
 stay-active v${VERSION}
-Keep Microsoft Teams (and other apps) showing you as "Active" on macOS
+Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux X11
 
 USAGE:
     stay-active <command>
@@ -48,9 +50,9 @@ HOW IT WORKS:
     Uses human-like patterns to avoid detection.
 
 REQUIREMENTS:
-    - macOS 10.13+
-    - cliclick (install via: brew install cliclick)
-    - Accessibility permissions for Terminal
+    - macOS 10.13+ with cliclick and Accessibility permissions
+    - Linux X11 with xdotool
+    - Wayland, including XWayland sessions, is not supported
 
 AUTHOR:
     Sleekhost
@@ -75,28 +77,102 @@ get_random_offset() {
     echo $((RANDOM % 11 - 5))
 }
 
-check_cliclick() {
-    if ! command -v cliclick &> /dev/null; then
-        echo -e "${RED}Error: cliclick not found${NC}"
-        echo ""
-        echo "Install it with:"
-        echo "  brew install cliclick"
-        echo ""
-        echo "Then grant Accessibility permissions in:"
-        echo "  System Settings → Privacy & Security → Accessibility"
-        exit 1
-    fi
+get_mouse_position() {
+    case "$PLATFORM" in
+        Darwin)
+            cliclick p 2>/dev/null | grep -oE '^[0-9]+,[0-9]+'
+            ;;
+        Linux)
+            position=$(xdotool getmouselocation --shell 2>/dev/null) || return 1
+            current_x=$(printf '%s\n' "$position" | sed -n 's/^X=\([0-9][0-9]*\)$/\1/p')
+            current_y=$(printf '%s\n' "$position" | sed -n 's/^Y=\([0-9][0-9]*\)$/\1/p')
+
+            if [ -n "$current_x" ] && [ -n "$current_y" ]; then
+                printf '%s,%s\n' "$current_x" "$current_y"
+            else
+                return 1
+            fi
+            ;;
+    esac
+}
+
+check_requirements() {
+    case "$PLATFORM" in
+        Darwin)
+            if ! command -v cliclick > /dev/null 2>&1; then
+                echo -e "${RED}Error: cliclick not found${NC}"
+                echo ""
+                echo "Install it with:"
+                echo "  brew install cliclick"
+                echo ""
+                echo "Then grant Accessibility permissions in:"
+                echo "  System Settings → Privacy & Security → Accessibility"
+                return 1
+            fi
+            ;;
+        Linux)
+            if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+                echo -e "${RED}Error: Wayland is not supported${NC}"
+                echo "Log into an X11 session and try again."
+                return 1
+            fi
+
+            if [ -z "${DISPLAY:-}" ]; then
+                echo -e "${RED}Error: DISPLAY is not set${NC}"
+                echo "Start stay-active from an X11 desktop session."
+                return 1
+            fi
+
+            if ! command -v xdotool > /dev/null 2>&1; then
+                echo -e "${RED}Error: xdotool not found${NC}"
+                echo "Install it with your distribution package manager."
+                return 1
+            fi
+
+            if ! get_mouse_position > /dev/null; then
+                echo -e "${RED}Error: Cannot access the X11 display${NC}"
+                echo "Confirm DISPLAY and X11 permissions, then try again."
+                return 1
+            fi
+            ;;
+        *)
+            echo -e "${RED}Error: Unsupported platform: ${PLATFORM}${NC}"
+            return 1
+            ;;
+    esac
+}
+
+move_mouse() {
+    case "$PLATFORM" in
+        Darwin)
+            cliclick -e 30 m:"$1","$2" > /dev/null 2>&1
+            ;;
+        Linux)
+            xdotool mousemove "$1" "$2" > /dev/null 2>&1
+            ;;
+    esac
+}
+
+press_shift() {
+    case "$PLATFORM" in
+        Darwin)
+            cliclick kd:shift ku:shift > /dev/null 2>&1
+            ;;
+        Linux)
+            xdotool key Shift_L > /dev/null 2>&1
+            ;;
+    esac
 }
 
 simulate_activity() {
     log_msg "Daemon started (v${VERSION})"
 
     while [ -f "$CONTROL_FILE" ]; do
-        current_pos=$(cliclick p 2>/dev/null | grep -oE '[0-9]+,[0-9]+')
+        current_pos=$(get_mouse_position)
 
         if [ -n "$current_pos" ]; then
-            current_x=$(echo "$current_pos" | cut -d',' -f1)
-            current_y=$(echo "$current_pos" | cut -d',' -f2)
+            current_x=${current_pos%,*}
+            current_y=${current_pos#*,}
 
             offset_x=$(get_random_offset)
             offset_y=$(get_random_offset)
@@ -104,23 +180,29 @@ simulate_activity() {
             new_x=$((current_x + offset_x))
             new_y=$((current_y + offset_y))
 
-            [ $new_x -lt 10 ] && new_x=10
-            [ $new_y -lt 10 ] && new_y=10
+            [ "$new_x" -lt 10 ] && new_x=10
+            [ "$new_y" -lt 10 ] && new_y=10
 
-            # Move mouse with easing (natural movement)
-            cliclick -e 30 m:$new_x,$new_y 2>/dev/null
+            # Move mouse with easing on macOS and an immediate move on X11.
+            if move_mouse "$new_x" "$new_y"; then
+                sleep "0.$((RANDOM % 3 + 1))"
 
-            sleep 0.$((RANDOM % 3 + 1))
+                # Press and release shift key (registers as activity)
+                if press_shift; then
+                    log_msg "Activity: mouse ($current_x,$current_y)->($new_x,$new_y) + shift key"
+                else
+                    log_msg "Warning: Could not send shift key"
+                fi
 
-            # Press and release shift key (registers as activity)
-            cliclick kd:shift ku:shift 2>/dev/null
-
-            log_msg "Activity: mouse ($current_x,$current_y)->($new_x,$new_y) + shift key"
-
-            # 60% chance to move back (natural behavior)
-            if [ $((RANDOM % 10)) -lt 6 ]; then
-                sleep 0.$((RANDOM % 5 + 1))
-                cliclick -e 30 m:$current_x,$current_y 2>/dev/null
+                # 60% chance to move back (natural behavior)
+                if [ $((RANDOM % 10)) -lt 6 ]; then
+                    sleep "0.$((RANDOM % 5 + 1))"
+                    if ! move_mouse "$current_x" "$current_y"; then
+                        log_msg "Warning: Could not restore mouse position"
+                    fi
+                fi
+            else
+                log_msg "Warning: Could not move mouse"
             fi
         else
             log_msg "Warning: Could not get mouse position"
@@ -145,9 +227,11 @@ simulate_activity() {
 }
 
 start_daemon() {
-    check_cliclick
+    if ! check_requirements; then
+        return 1
+    fi
 
-    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo -e "${YELLOW}Already running${NC}"
         return 1
     fi
@@ -163,7 +247,7 @@ start_daemon() {
     touch "$CONTROL_FILE"
     simulate_activity &
     echo $! > "$PID_FILE"
-    echo -e "${GREEN}Started${NC} (PID: $(cat $PID_FILE))"
+    echo -e "${GREEN}Started${NC} (PID: $(cat "$PID_FILE"))"
 }
 
 stop_daemon() {
@@ -193,8 +277,8 @@ toggle_daemon() {
 }
 
 status_daemon() {
-    if [ -f "$CONTROL_FILE" ] && [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-        echo -e "${GREEN}Running${NC} (PID: $(cat $PID_FILE))"
+    if [ -f "$CONTROL_FILE" ] && [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+        echo -e "${GREEN}Running${NC} (PID: $(cat "$PID_FILE"))"
         return 0
     else
         echo -e "${RED}Stopped${NC}"

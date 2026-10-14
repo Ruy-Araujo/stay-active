@@ -8,7 +8,7 @@ Thank you for your interest in contributing to stay-active!
 
 1. Check if the bug has already been reported in [Issues](https://github.com/sleekhost/stay-active/issues)
 2. If not, create a new issue with:
-   - macOS version
+   - Operating system and version
    - Steps to reproduce
    - Expected vs actual behavior
    - Output of `stay-active log`
@@ -25,7 +25,7 @@ Open an issue with the `enhancement` label describing:
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-feature`
 3. Make your changes
-4. Test thoroughly on macOS
+4. Test thoroughly on the supported platform
 5. Commit with clear messages
 6. Push and open a Pull Request
 
@@ -34,11 +34,10 @@ Open an issue with the `enhancement` label describing:
 - Use 4-space indentation in shell scripts
 - Add comments for complex logic
 - Follow existing naming conventions
-- Test on macOS 10.13+ if possible
+- Test on macOS 10.13+ or Linux X11 if possible
 
 ### Ideas for Contributions
 
-- **Linux support** - Use xdotool instead of cliclick
 - **Windows support** - PowerShell/AutoHotkey version
 - **Configurable intervals** - CLI flags for custom timing
 - **Schedule mode** - Only run during specified hours

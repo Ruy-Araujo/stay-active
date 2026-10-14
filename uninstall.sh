@@ -6,10 +6,11 @@
 
 set -e
 
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+
+PLATFORM=$(uname -s)
 
 echo -e "${YELLOW}Uninstalling stay-active...${NC}"
 echo ""
@@ -38,7 +39,13 @@ echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}  stay-active has been uninstalled${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
-echo "Optional: To also remove cliclick, run:"
-echo "  brew uninstall cliclick"
+
+if [ "$PLATFORM" = "Darwin" ]; then
+    echo "Optional: To also remove cliclick, run:"
+    echo "  brew uninstall cliclick"
+elif [ "$PLATFORM" = "Linux" ]; then
+    echo "Optional: Remove xdotool with your distribution package manager."
+fi
+
 echo ""
 echo "Thank you for using stay-active!"

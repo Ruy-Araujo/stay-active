@@ -1,10 +1,11 @@
 <p align="center">
   <h1 align="center">stay-active</h1>
   <p align="center">
-    <strong>Keep Microsoft Teams (and other apps) showing you as "Active" on macOS</strong>
+    <strong>Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux X11</strong>
   </p>
   <p align="center">
     <a href="https://www.apple.com/macos"><img src="https://img.shields.io/badge/macOS-10.13+-blue.svg?style=for-the-badge&logo=apple" alt="macOS"></a>
+    <a href="https://www.x.org/"><img src="https://img.shields.io/badge/Linux-X11-FCC624.svg?style=for-the-badge&logo=linux&logoColor=black" alt="Linux X11"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/Shell-Bash-4EAA25.svg?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Bash"></a>
   </p>
@@ -50,18 +51,31 @@ This creates problems:
 curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/install.sh | bash
 ```
 
-That's it! The installer handles everything: Homebrew, cliclick, PATH setup.
+That's it! The installer handles Homebrew and cliclick on macOS, or xdotool on Linux, then configures PATH.
 
 <details>
 <summary><strong>Manual Installation</strong></summary>
 
-### 1. Install cliclick
+### macOS
+
+Install cliclick:
 
 ```bash
 brew install cliclick
 ```
 
-### 2. Download stay-active
+### Linux X11
+
+Install xdotool with your distribution package manager:
+
+```bash
+sudo apt-get install xdotool       # Debian / Ubuntu
+sudo dnf install xdotool           # Fedora
+sudo pacman -S xdotool             # Arch Linux
+sudo zypper install xdotool        # openSUSE
+```
+
+### Download stay-active
 
 ```bash
 mkdir -p ~/.local/bin
@@ -69,14 +83,19 @@ curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/stay-act
 chmod +x ~/.local/bin/stay-active
 ```
 
-### 3. Add to PATH
+### Add to PATH
 
 ```bash
+# Zsh
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
+
+# Bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### 4. Grant Accessibility Permissions
+### Grant Accessibility Permissions on macOS
 
 1. Open **System Settings** → **Privacy & Security** → **Accessibility**
 2. Click **+** and add **Terminal** (or your terminal app)
@@ -133,10 +152,9 @@ This mimics natural human behavior — no predictable patterns that could be fla
 
 | Requirement | Details |
 |-------------|---------|
-| **macOS** | 10.13 (High Sierra) or newer |
-| **Homebrew** | Package manager ([brew.sh](https://brew.sh)) |
-| **cliclick** | Mouse/keyboard automation (auto-installed) |
-| **Permissions** | Accessibility access for Terminal |
+| **macOS** | 10.13 (High Sierra) or newer, Homebrew, cliclick, and Accessibility access |
+| **Linux** | X11 session with xdotool |
+| **Wayland** | Not supported, including XWayland sessions |
 
 ---
 
@@ -148,6 +166,22 @@ This mimics natural human behavior — no predictable patterns that could be fla
 ```bash
 brew install cliclick
 ```
+</details>
+
+<details>
+<summary><strong>"xdotool not found"</strong></summary>
+
+Install it with your distribution package manager, for example:
+
+```bash
+sudo apt-get install xdotool
+```
+</details>
+
+<details>
+<summary><strong>"Wayland is not supported" or "DISPLAY is not set"</strong></summary>
+
+Log into an X11 desktop session and start `stay-active` from that session. `xdotool` does not support Wayland, including XWayland sessions, reliably.
 </details>
 
 <details>
@@ -182,7 +216,8 @@ curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/uninstal
 stay-active stop
 rm ~/.local/bin/stay-active
 rm ~/.local/.stay_active_*
-brew uninstall cliclick  # optional
+brew uninstall cliclick  # optional on macOS
+# Remove xdotool with your package manager  # optional on Linux
 ```
 </details>
 
@@ -202,7 +237,7 @@ brew uninstall cliclick  # optional
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Ideas:**
-- [ ] Linux support (xdotool)
+- [x] Linux X11 support (xdotool)
 - [ ] Windows support (PowerShell)
 - [ ] Configurable intervals
 - [ ] Schedule mode (work hours only)
