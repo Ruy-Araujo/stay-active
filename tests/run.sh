@@ -246,7 +246,9 @@ command() {
 }
 EOF
     reset_case
-    BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_MANAGER="$manager" MOCK_PLATFORM=Linux MOCK_INSTALL_LOG="$TEMP_DIR/install.log" HOME="$HOME_DIR" SHELL=/bin/bash PATH="$install_bin:/usr/bin:/bin" /usr/bin/bash "$ROOT/install.sh"
+    remote_installer="$TEMP_DIR/remote-install.sh"
+    cp "$ROOT/install.sh" "$remote_installer"
+    BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_MANAGER="$manager" MOCK_PLATFORM=Linux MOCK_INSTALL_LOG="$TEMP_DIR/install.log" HOME="$HOME_DIR" SHELL=/bin/bash PATH="$install_bin:/usr/bin:/bin" /usr/bin/bash "$remote_installer"
 }
 
 for manager in apt-get dnf pacman zypper; do
@@ -254,10 +256,27 @@ for manager in apt-get dnf pacman zypper; do
     run_installer "$manager"
     install_log=$(cat "$TEMP_DIR/install.log")
     assert_contains "$install_log" "manager $manager"
-    assert_contains "$install_log" "raw.githubusercontent.com/sleekhost/stay-active"
+    assert_contains "$install_log" "raw.githubusercontent.com/Ruy-Araujo/stay-active"
     assert_contains "$(cat "$HOME_DIR/.bashrc")" '.local/bin'
     [ -x "$HOME_DIR/.local/bin/stay-active" ] || fail "installer did not install executable"
 done
+
+reset_case
+LOCAL_INSTALL_BIN="$TEMP_DIR/local-install"
+rm -rf "$LOCAL_INSTALL_BIN"
+mkdir "$LOCAL_INSTALL_BIN"
+cp "$BIN_DIR/uname" "$LOCAL_INSTALL_BIN/uname"
+cat > "$LOCAL_INSTALL_BIN/xdotool" << 'EOF'
+#!/bin/bash
+exit 0
+EOF
+cat > "$LOCAL_INSTALL_BIN/curl" << 'EOF'
+#!/bin/bash
+exit 1
+EOF
+chmod +x "$LOCAL_INSTALL_BIN"/*
+HOME="$HOME_DIR" SHELL=/bin/bash PATH="$LOCAL_INSTALL_BIN:/usr/bin:/bin" MOCK_PLATFORM=Linux /usr/bin/bash "$ROOT/install.sh"
+cmp "$ROOT/stay-active" "$HOME_DIR/.local/bin/stay-active" || fail "local installer did not copy the checkout script"
 
 reset_case
 FAILED_SUDO_BIN="$TEMP_DIR/failed-sudo"

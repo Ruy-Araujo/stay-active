@@ -14,7 +14,13 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 PLATFORM=$(uname -s)
-REPOSITORY="https://raw.githubusercontent.com/sleekhost/stay-active/main/stay-active"
+# The upstream project is macOS-only; this fork provides the Linux X11 implementation.
+REPOSITORY="https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/stay-active"
+LOCAL_SCRIPT=""
+
+if [ -f "$0" ]; then
+    LOCAL_SCRIPT="$(cd "$(dirname "$0")" && pwd)/stay-active"
+fi
 
 run_as_root() {
     if [ "$(id -u)" -eq 0 ]; then
@@ -105,8 +111,12 @@ echo ""
 echo -e "${BLUE}[3/4]${NC} Installing stay-active..."
 mkdir -p "$HOME/.local/bin"
 
-# Download the script
-curl -fsSL "$REPOSITORY" -o "$HOME/.local/bin/stay-active"
+# Install from the checkout when available; otherwise download the current release.
+if [ -f "$LOCAL_SCRIPT" ]; then
+    cp "$LOCAL_SCRIPT" "$HOME/.local/bin/stay-active"
+else
+    curl -fsSL "$REPOSITORY" -o "$HOME/.local/bin/stay-active"
+fi
 chmod +x "$HOME/.local/bin/stay-active"
 echo -e "${GREEN}stay-active installed to ~/.local/bin/${NC}"
 

@@ -48,10 +48,16 @@ This creates problems:
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/install.sh | bash
 ```
 
 That's it! The installer handles Homebrew and cliclick on macOS, or xdotool on Linux, then configures PATH.
+
+To install from a local checkout instead of downloading the script, run:
+
+```bash
+./install.sh
+```
 
 <details>
 <summary><strong>Manual Installation</strong></summary>
@@ -79,7 +85,7 @@ sudo zypper install xdotool        # openSUSE
 
 ```bash
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/stay-active -o ~/.local/bin/stay-active
+curl -fsSL https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/stay-active -o ~/.local/bin/stay-active
 chmod +x ~/.local/bin/stay-active
 ```
 
@@ -206,7 +212,7 @@ Log into an X11 desktop session and start `stay-active` from that session. `xdot
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sleekhost/stay-active/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/uninstall.sh | bash
 ```
 
 <details>
