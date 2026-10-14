@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 show_help() {
     cat << EOF
 stay-active v${VERSION}
-Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux X11
+Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux
 
 USAGE:
     stay-active <command>
@@ -52,7 +52,7 @@ HOW IT WORKS:
 REQUIREMENTS:
     - macOS 10.13+ with cliclick and Accessibility permissions
     - Linux X11 with xdotool
-    - Wayland, including XWayland sessions, is not supported
+    - Linux Wayland with ydotool and ydotoold
 
 AUTHOR:
     Sleekhost
@@ -75,6 +75,10 @@ get_random_interval() {
 
 get_random_offset() {
     echo $((RANDOM % 11 - 5))
+}
+
+is_wayland() {
+    [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]
 }
 
 get_mouse_position() {
@@ -111,10 +115,19 @@ check_requirements() {
             fi
             ;;
         Linux)
-            if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
-                echo -e "${RED}Error: Wayland is not supported${NC}"
-                echo "Log into an X11 session and try again."
-                return 1
+            if is_wayland; then
+                if ! command -v ydotool > /dev/null 2>&1; then
+                    echo -e "${RED}Error: ydotool not found${NC}"
+                    echo "Install ydotool and configure ydotoold before starting stay-active."
+                    return 1
+                fi
+
+                if ! ydotool mousemove -x 0 -y 0 > /dev/null 2>&1; then
+                    echo -e "${RED}Error: Cannot access ydotoold${NC}"
+                    echo "Confirm ydotoold is running and its socket permissions allow access."
+                    return 1
+                fi
+                return 0
             fi
 
             if [ -z "${DISPLAY:-}" ]; then
@@ -148,7 +161,11 @@ move_mouse() {
             cliclick -e 30 m:"$1","$2" > /dev/null 2>&1
             ;;
         Linux)
-            xdotool mousemove "$1" "$2" > /dev/null 2>&1
+            if is_wayland; then
+                ydotool mousemove -x "$1" -y "$2" > /dev/null 2>&1
+            else
+                xdotool mousemove "$1" "$2" > /dev/null 2>&1
+            fi
             ;;
     esac
 }
@@ -159,7 +176,11 @@ press_shift() {
             cliclick kd:shift ku:shift > /dev/null 2>&1
             ;;
         Linux)
-            xdotool key Shift_L > /dev/null 2>&1
+            if is_wayland; then
+                ydotool key 42:1 42:0 > /dev/null 2>&1
+            else
+                xdotool key Shift_L > /dev/null 2>&1
+            fi
             ;;
     esac
 }
@@ -168,36 +189,22 @@ simulate_activity() {
     log_msg "Daemon started (v${VERSION})"
 
     while [ -f "$CONTROL_FILE" ]; do
-        current_pos=$(get_mouse_position)
-
-        if [ -n "$current_pos" ]; then
-            current_x=${current_pos%,*}
-            current_y=${current_pos#*,}
-
+        if [ "$PLATFORM" = "Linux" ] && is_wayland; then
             offset_x=$(get_random_offset)
             offset_y=$(get_random_offset)
 
-            new_x=$((current_x + offset_x))
-            new_y=$((current_y + offset_y))
-
-            [ "$new_x" -lt 10 ] && new_x=10
-            [ "$new_y" -lt 10 ] && new_y=10
-
-            # Move mouse with easing on macOS and an immediate move on X11.
-            if move_mouse "$new_x" "$new_y"; then
+            if move_mouse "$offset_x" "$offset_y"; then
                 sleep "0.$((RANDOM % 3 + 1))"
 
-                # Press and release shift key (registers as activity)
                 if press_shift; then
-                    log_msg "Activity: mouse ($current_x,$current_y)->($new_x,$new_y) + shift key"
+                    log_msg "Activity: mouse moved ($offset_x,$offset_y) + shift key"
                 else
                     log_msg "Warning: Could not send shift key"
                 fi
 
-                # 60% chance to move back (natural behavior)
-                if [ $((RANDOM % 10)) -lt 6 ]; then
+                if [ "${STAY_ACTIVE_TEST_RESTORE_MOUSE:-}" = "1" ] || [ $((RANDOM % 10)) -lt 6 ]; then
                     sleep "0.$((RANDOM % 5 + 1))"
-                    if ! move_mouse "$current_x" "$current_y"; then
+                    if ! move_mouse "$((-offset_x))" "$((-offset_y))"; then
                         log_msg "Warning: Could not restore mouse position"
                     fi
                 fi
@@ -205,7 +212,45 @@ simulate_activity() {
                 log_msg "Warning: Could not move mouse"
             fi
         else
-            log_msg "Warning: Could not get mouse position"
+            current_pos=$(get_mouse_position)
+
+            if [ -n "$current_pos" ]; then
+                current_x=${current_pos%,*}
+                current_y=${current_pos#*,}
+
+                offset_x=$(get_random_offset)
+                offset_y=$(get_random_offset)
+
+                new_x=$((current_x + offset_x))
+                new_y=$((current_y + offset_y))
+
+                [ "$new_x" -lt 10 ] && new_x=10
+                [ "$new_y" -lt 10 ] && new_y=10
+
+                # Move mouse with easing on macOS and an immediate move on X11.
+                if move_mouse "$new_x" "$new_y"; then
+                    sleep "0.$((RANDOM % 3 + 1))"
+
+                    # Press and release shift key (registers as activity)
+                    if press_shift; then
+                        log_msg "Activity: mouse ($current_x,$current_y)->($new_x,$new_y) + shift key"
+                    else
+                        log_msg "Warning: Could not send shift key"
+                    fi
+
+                    # 60% chance to move back (natural behavior)
+                    if [ $((RANDOM % 10)) -lt 6 ]; then
+                        sleep "0.$((RANDOM % 5 + 1))"
+                        if ! move_mouse "$current_x" "$current_y"; then
+                            log_msg "Warning: Could not restore mouse position"
+                        fi
+                    fi
+                else
+                    log_msg "Warning: Could not move mouse"
+                fi
+            else
+                log_msg "Warning: Could not get mouse position"
+            fi
         fi
 
         interval=$(get_random_interval)

@@ -14,9 +14,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 PLATFORM=$(uname -s)
-# The upstream project is macOS-only; this fork provides the Linux X11 implementation.
+# The upstream project is macOS-only; this fork provides the Linux implementation.
 REPOSITORY="https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/stay-active"
 LOCAL_SCRIPT=""
+LINUX_DEPENDENCY=""
 
 if [ -f "$0" ]; then
     LOCAL_SCRIPT="$(cd "$(dirname "$0")" && pwd)/stay-active"
@@ -27,37 +28,41 @@ run_as_root() {
         "$@"
     elif command -v sudo > /dev/null 2>&1; then
         if ! sudo "$@"; then
-            echo -e "${RED}Error: Could not install xdotool${NC}"
-            echo "Install xdotool manually, then run this installer again."
+            echo -e "${RED}Error: Could not install ${LINUX_DEPENDENCY}${NC}"
+            echo "Install ${LINUX_DEPENDENCY} manually, then run this installer again."
             return 1
         fi
     else
         echo -e "${RED}Error: Administrative privileges are required${NC}"
-        echo "Install xdotool manually, then run this installer again."
+        echo "Install ${LINUX_DEPENDENCY} manually, then run this installer again."
         return 1
     fi
 }
 
 install_linux_dependency() {
-    if command -v xdotool > /dev/null 2>&1; then
-        echo -e "${GREEN}xdotool already installed${NC}"
+    if command -v "$LINUX_DEPENDENCY" > /dev/null 2>&1; then
+        echo -e "${GREEN}${LINUX_DEPENDENCY} already installed${NC}"
         return
     fi
 
     if command -v apt-get > /dev/null 2>&1; then
         run_as_root apt-get update
-        run_as_root apt-get install -y xdotool
+        run_as_root apt-get install -y "$LINUX_DEPENDENCY"
     elif command -v dnf > /dev/null 2>&1; then
-        run_as_root dnf install -y xdotool
+        run_as_root dnf install -y "$LINUX_DEPENDENCY"
     elif command -v pacman > /dev/null 2>&1; then
-        run_as_root pacman -S --needed --noconfirm xdotool
+        run_as_root pacman -S --needed --noconfirm "$LINUX_DEPENDENCY"
     elif command -v zypper > /dev/null 2>&1; then
-        run_as_root zypper --non-interactive install xdotool
+        run_as_root zypper --non-interactive install "$LINUX_DEPENDENCY"
     else
         echo -e "${RED}Error: No supported package manager found${NC}"
-        echo "Install xdotool manually, then run this installer again."
+        echo "Install ${LINUX_DEPENDENCY} manually, then run this installer again."
         return 1
     fi
+}
+
+is_wayland() {
+    [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]
 }
 
 echo -e "${BLUE}"
@@ -98,7 +103,12 @@ case "$PLATFORM" in
         fi
         ;;
     Linux)
-        echo -e "${BLUE}[1/4]${NC} Checking for xdotool..."
+        if is_wayland; then
+            LINUX_DEPENDENCY="ydotool"
+        else
+            LINUX_DEPENDENCY="xdotool"
+        fi
+        echo -e "${BLUE}[1/4]${NC} Checking for ${LINUX_DEPENDENCY}..."
         install_linux_dependency
         ;;
     *)
@@ -154,9 +164,13 @@ if [ "$PLATFORM" = "Darwin" ]; then
     echo "2. Click + and add your Terminal app"
     echo "3. Also add: /opt/homebrew/bin/cliclick"
 else
-    echo -e "${YELLOW}IMPORTANT: Use an X11 desktop session${NC}"
-    echo ""
-    echo "Wayland, including XWayland sessions, is not supported."
+    if is_wayland; then
+        echo -e "${YELLOW}IMPORTANT: Configure ydotoold${NC}"
+        echo ""
+        echo "ydotoold must be running with access to /dev/uinput before starting stay-active."
+    else
+        echo -e "${YELLOW}IMPORTANT: Use an X11 desktop session${NC}"
+    fi
 fi
 
 echo ""

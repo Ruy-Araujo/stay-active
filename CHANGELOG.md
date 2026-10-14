@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Linux X11 support using xdotool
+- Linux Wayland support using ydotool and ydotoold
 
 ### Changed
-- Documented X11 requirements and the Wayland limitation
-- Use this fork's installer to distribute the Linux X11 implementation
+- Documented X11 and Wayland requirements
+- Use this fork's installer to distribute the Linux implementation
 
 ## [1.0.0] - 2025-12-09
 
@@ -31,6 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical Details
 - Pure Bash implementation
-- Uses cliclick on macOS and xdotool on Linux X11 for mouse/keyboard automation
+- Uses cliclick on macOS, xdotool on Linux X11, and ydotool on Linux Wayland for mouse/keyboard automation
 - Runs as background daemon
 - Control via file-based flags

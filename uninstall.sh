@@ -44,7 +44,7 @@ if [ "$PLATFORM" = "Darwin" ]; then
     echo "Optional: To also remove cliclick, run:"
     echo "  brew uninstall cliclick"
 elif [ "$PLATFORM" = "Linux" ]; then
-    echo "Optional: Remove xdotool with your distribution package manager."
+    echo "Optional: Remove xdotool or ydotool with your distribution package manager."
 fi
 
 echo ""

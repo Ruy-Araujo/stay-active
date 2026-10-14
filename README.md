@@ -1,11 +1,12 @@
 <p align="center">
   <h1 align="center">stay-active</h1>
   <p align="center">
-    <strong>Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux X11</strong>
+    <strong>Keep Microsoft Teams (and other apps) showing you as "Active" on macOS and Linux</strong>
   </p>
   <p align="center">
     <a href="https://www.apple.com/macos"><img src="https://img.shields.io/badge/macOS-10.13+-blue.svg?style=for-the-badge&logo=apple" alt="macOS"></a>
     <a href="https://www.x.org/"><img src="https://img.shields.io/badge/Linux-X11-FCC624.svg?style=for-the-badge&logo=linux&logoColor=black" alt="Linux X11"></a>
+    <a href="https://wayland.freedesktop.org/"><img src="https://img.shields.io/badge/Linux-Wayland-FCC624.svg?style=for-the-badge&logo=linux&logoColor=black" alt="Linux Wayland"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/Shell-Bash-4EAA25.svg?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Bash"></a>
   </p>
@@ -51,7 +52,7 @@ This creates problems:
 curl -fsSL https://raw.githubusercontent.com/Ruy-Araujo/stay-active/main/install.sh | bash
 ```
 
-That's it! The installer handles Homebrew and cliclick on macOS, or xdotool on Linux, then configures PATH.
+That's it! The installer handles Homebrew and cliclick on macOS, xdotool on Linux X11, or ydotool on Linux Wayland, then configures PATH.
 
 To install from a local checkout instead of downloading the script, run:
 
@@ -80,6 +81,31 @@ sudo dnf install xdotool           # Fedora
 sudo pacman -S xdotool             # Arch Linux
 sudo zypper install xdotool        # openSUSE
 ```
+
+### Linux Wayland
+
+Install ydotool with your distribution package manager:
+
+```bash
+sudo apt-get install ydotool       # Debian / Ubuntu
+sudo dnf install ydotool           # Fedora
+sudo pacman -S ydotool             # Arch Linux
+sudo zypper install ydotool        # openSUSE
+```
+
+`ydotool` requires `ydotoold`, which creates a virtual input device through `/dev/uinput`. Configure and start the daemon manually before running `stay-active`. For example, the following command creates a user-owned socket in the current desktop session:
+
+```bash
+sudo ydotoold --socket-path="$XDG_RUNTIME_DIR/.ydotool_socket" --socket-own="$(id -u):$(id -g)" --socket-perm=0600 &
+```
+
+The client uses that location by default. If your daemon uses another socket, export its path before starting `stay-active`:
+
+```bash
+export YDOTOOL_SOCKET=/path/to/.ydotool_socket
+```
+
+Wayland uses relative mouse movement. Pointer acceleration, screen edges, or user input can prevent the return movement from restoring the exact original pixel.
 
 ### Download stay-active
 
@@ -159,8 +185,8 @@ This mimics natural human behavior — no predictable patterns that could be fla
 | Requirement | Details |
 |-------------|---------|
 | **macOS** | 10.13 (High Sierra) or newer, Homebrew, cliclick, and Accessibility access |
-| **Linux** | X11 session with xdotool |
-| **Wayland** | Not supported, including XWayland sessions |
+| **Linux X11** | X11 session with xdotool |
+| **Linux Wayland** | ydotool and a running ydotoold with access to `/dev/uinput` |
 
 ---
 
@@ -185,9 +211,15 @@ sudo apt-get install xdotool
 </details>
 
 <details>
-<summary><strong>"Wayland is not supported" or "DISPLAY is not set"</strong></summary>
+<summary><strong>"ydotool not found" or "Cannot access ydotoold"</strong></summary>
 
-Log into an X11 desktop session and start `stay-active` from that session. `xdotool` does not support Wayland, including XWayland sessions, reliably.
+Install ydotool, then start `ydotoold` with access to `/dev/uinput` and a socket your user can access. Set `YDOTOOL_SOCKET` if the daemon does not use `$XDG_RUNTIME_DIR/.ydotool_socket`.
+</details>
+
+<details>
+<summary><strong>"DISPLAY is not set"</strong></summary>
+
+Start `stay-active` from an X11 session, or use a Wayland session with ydotool configured.
 </details>
 
 <details>
@@ -223,7 +255,7 @@ stay-active stop
 rm ~/.local/bin/stay-active
 rm ~/.local/.stay_active_*
 brew uninstall cliclick  # optional on macOS
-# Remove xdotool with your package manager  # optional on Linux
+# Remove xdotool or ydotool with your package manager  # optional on Linux
 ```
 </details>
 
@@ -244,6 +276,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Ideas:**
 - [x] Linux X11 support (xdotool)
+- [x] Linux Wayland support (ydotool)
 - [ ] Windows support (PowerShell)
 - [ ] Configurable intervals
 - [ ] Schedule mode (work hours only)

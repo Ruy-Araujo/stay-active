@@ -58,6 +58,23 @@ wait_for_log() {
     fail "timed out waiting for '$expected'"
 }
 
+wait_for_ydotool_inverse() {
+    attempts=0
+    while [ "$attempts" -lt 20 ]; do
+        movement=$(grep '^mousemove -x ' "$TEMP_DIR/activity.log" | grep -v '^mousemove -x 0 -y 0$' | head -1 || true)
+        if [ -n "$movement" ]; then
+            set -- $movement
+            inverse="mousemove -x $((- $3)) -y $((- $5))"
+            if grep -qx "$inverse" "$TEMP_DIR/activity.log"; then
+                return
+            fi
+        fi
+        /usr/bin/sleep 0.01
+        attempts=$((attempts + 1))
+    done
+    fail "timed out waiting for inverse ydotool movement"
+}
+
 write_mock_tools() {
     cat > "$BIN_DIR/uname" << 'EOF'
 #!/bin/bash
@@ -75,6 +92,16 @@ if [ "$1" = "getmouselocation" ]; then
 fi
 if [ "$1" = "mousemove" ] && [ "${MOCK_MOUSEMOVE_FAIL:-}" = "1" ]; then exit 1; fi
 if [ "$1" = "key" ] && [ "${MOCK_KEY_FAIL:-}" = "1" ]; then exit 1; fi
+EOF
+    cat > "$BIN_DIR/ydotool" << 'EOF'
+#!/bin/bash
+echo "$*" >> "$MOCK_LOG"
+if [ "${MOCK_YDOTOOL_MODE:-ok}" = "fail" ]; then exit 1; fi
+if [ "$1" = "mousemove" ] && [ "$2" = "-x" ] && [ "$3" = "0" ] && [ "$4" = "-y" ] && [ "$5" = "0" ]; then
+    exit 0
+fi
+if [ "$1" = "mousemove" ] && [ "${MOCK_YDOTOOL_MOUSEMOVE_FAIL:-}" = "1" ]; then exit 1; fi
+if [ "$1" = "key" ] && [ "${MOCK_YDOTOOL_KEY_FAIL:-}" = "1" ]; then exit 1; fi
 EOF
     cat > "$BIN_DIR/cliclick" << 'EOF'
 #!/bin/bash
@@ -104,13 +131,50 @@ run_stay_active() {
 write_mock_tools
 
 reset_case
-output=$(MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland DISPLAY=:1 run_stay_active start 2>&1 || true)
-assert_contains "$output" "Wayland is not supported"
-[ ! -e "$HOME_DIR/.local/.stay_active_on" ] || fail "Wayland created a control file"
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 DISPLAY= STAY_ACTIVE_TEST_RESTORE_MOUSE=1 run_stay_active start
+wait_for_log "Activity: mouse moved"
+activity=$(cat "$TEMP_DIR/activity.log")
+assert_contains "$activity" "mousemove -x 0 -y 0"
+assert_contains "$activity" "key 42:1 42:0"
+assert_not_contains "$activity" "getmouselocation"
+assert_not_contains "$activity" "xdotool"
+wait_for_ydotool_inverse
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 DISPLAY= run_stay_active stop
 
 reset_case
-output=$(MOCK_PLATFORM=Linux XDG_SESSION_TYPE=x11 WAYLAND_DISPLAY=wayland-0 DISPLAY=:1 run_stay_active start 2>&1 || true)
-assert_contains "$output" "Wayland is not supported"
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=x11 WAYLAND_DISPLAY=wayland-0 DISPLAY=:1 run_stay_active start
+wait_for_log "Activity: mouse moved"
+activity=$(cat "$TEMP_DIR/activity.log")
+assert_contains "$activity" "mousemove -x 0 -y 0"
+assert_not_contains "$activity" "getmouselocation"
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=x11 WAYLAND_DISPLAY=wayland-0 DISPLAY=:1 run_stay_active stop
+
+reset_case
+MISSING_YDOTOOL_ENV="$TEMP_DIR/missing-ydotool.sh"
+cat > "$MISSING_YDOTOOL_ENV" << 'EOF'
+command() {
+    if [ "$1" = "-v" ] && [ "$2" = "ydotool" ]; then return 1; fi
+    builtin command "$@"
+}
+EOF
+output=$(BASH_ENV="$MISSING_YDOTOOL_ENV" MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 HOME="$HOME_DIR" PATH="$BIN_DIR:$PATH" "$ROOT/stay-active" start 2>&1 || true)
+assert_contains "$output" "ydotool not found"
+[ ! -e "$HOME_DIR/.local/.stay_active_on" ] || fail "missing ydotool created a control file"
+
+reset_case
+output=$(MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 MOCK_YDOTOOL_MODE=fail run_stay_active start 2>&1 || true)
+assert_contains "$output" "Cannot access ydotoold"
+[ ! -e "$HOME_DIR/.local/.stay_active_on" ] || fail "unavailable ydotoold created a control file"
+
+reset_case
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 MOCK_YDOTOOL_MOUSEMOVE_FAIL=1 run_stay_active start
+wait_for_log "Could not move mouse"
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 run_stay_active stop
+
+reset_case
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 MOCK_YDOTOOL_KEY_FAIL=1 run_stay_active start
+wait_for_log "Could not send shift key"
+MOCK_PLATFORM=Linux XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 run_stay_active stop
 
 reset_case
 output=$(MOCK_PLATFORM=Linux DISPLAY= XDG_SESSION_TYPE=x11 run_stay_active start 2>&1 || true)
@@ -199,6 +263,7 @@ fi
 
 run_installer() {
     manager=$1
+    dependency=$2
     install_bin="$TEMP_DIR/installer-$manager"
     rm -rf "$install_bin"
     mkdir -p "$install_bin"
@@ -235,7 +300,7 @@ EOF
 command() {
     if [ "$1" = "-v" ]; then
         case "$2" in
-            xdotool) return 1 ;;
+            "$MOCK_DEPENDENCY") return 1 ;;
             apt-get|dnf|pacman|zypper)
                 [ "$2" = "$MOCK_MANAGER" ]
                 return
@@ -248,18 +313,24 @@ EOF
     reset_case
     remote_installer="$TEMP_DIR/remote-install.sh"
     cp "$ROOT/install.sh" "$remote_installer"
-    BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_MANAGER="$manager" MOCK_PLATFORM=Linux MOCK_INSTALL_LOG="$TEMP_DIR/install.log" HOME="$HOME_DIR" SHELL=/bin/bash PATH="$install_bin:/usr/bin:/bin" /usr/bin/bash "$remote_installer"
+    BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_DEPENDENCY="$dependency" MOCK_MANAGER="$manager" MOCK_PLATFORM=Linux MOCK_INSTALL_LOG="$TEMP_DIR/install.log" HOME="$HOME_DIR" SHELL=/bin/bash PATH="$install_bin:/usr/bin:/bin" /usr/bin/bash "$remote_installer"
 }
 
 for manager in apt-get dnf pacman zypper; do
     : > "$TEMP_DIR/install.log"
-    run_installer "$manager"
+    run_installer "$manager" xdotool
     install_log=$(cat "$TEMP_DIR/install.log")
     assert_contains "$install_log" "manager $manager"
     assert_contains "$install_log" "raw.githubusercontent.com/Ruy-Araujo/stay-active"
     assert_contains "$(cat "$HOME_DIR/.bashrc")" '.local/bin'
     [ -x "$HOME_DIR/.local/bin/stay-active" ] || fail "installer did not install executable"
 done
+
+: > "$TEMP_DIR/install.log"
+XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0 run_installer apt-get ydotool
+install_log=$(cat "$TEMP_DIR/install.log")
+assert_contains "$install_log" "manager apt-get"
+assert_contains "$install_log" "ydotool"
 
 reset_case
 LOCAL_INSTALL_BIN="$TEMP_DIR/local-install"
@@ -296,7 +367,7 @@ cat > "$FAILED_SUDO_BIN/apt-get" << 'EOF'
 exit 0
 EOF
 chmod +x "$FAILED_SUDO_BIN"/*
-output=$(BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_MANAGER=apt-get HOME="$HOME_DIR" PATH="$FAILED_SUDO_BIN:/usr/bin:/bin" MOCK_PLATFORM=Linux /usr/bin/bash "$ROOT/install.sh" 2>&1 || true)
+output=$(BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_DEPENDENCY=xdotool MOCK_MANAGER=apt-get HOME="$HOME_DIR" PATH="$FAILED_SUDO_BIN:/usr/bin:/bin" MOCK_PLATFORM=Linux /usr/bin/bash "$ROOT/install.sh" 2>&1 || true)
 assert_contains "$output" "Could not install xdotool"
 
 reset_case
@@ -333,7 +404,7 @@ cat > "$NO_MANAGER_BIN/id" << 'EOF'
 echo 1000
 EOF
 chmod +x "$NO_MANAGER_BIN"/*
-output=$(BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_MANAGER=none HOME="$HOME_DIR" PATH="$NO_MANAGER_BIN:/usr/bin:/bin" MOCK_PLATFORM=Linux /usr/bin/bash "$ROOT/install.sh" 2>&1 || true)
+output=$(BASH_ENV="$TEMP_DIR/missing-installer-xdotool.sh" MOCK_DEPENDENCY=xdotool MOCK_MANAGER=none HOME="$HOME_DIR" PATH="$NO_MANAGER_BIN:/usr/bin:/bin" MOCK_PLATFORM=Linux /usr/bin/bash "$ROOT/install.sh" 2>&1 || true)
 assert_contains "$output" "No supported package manager found"
 
 reset_case

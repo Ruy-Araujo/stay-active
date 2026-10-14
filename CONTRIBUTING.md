@@ -34,7 +34,7 @@ Open an issue with the `enhancement` label describing:
 - Use 4-space indentation in shell scripts
 - Add comments for complex logic
 - Follow existing naming conventions
-- Test on macOS 10.13+ or Linux X11 if possible
+- Test on macOS 10.13+, Linux X11, or Linux Wayland if possible
 
 ### Ideas for Contributions
 
